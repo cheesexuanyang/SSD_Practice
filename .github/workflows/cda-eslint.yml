@@ -5,6 +5,13 @@ on: [push, pull_request]
 jobs:
   eslint:
     runs-on: ubuntu-latest
+    
+    # Add these permissions to allow uploading to GitHub Security
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
