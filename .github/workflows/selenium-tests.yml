@@ -37,17 +37,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     
-    services:
-      selenium:
-        image: selenium/standalone-chrome:latest
-        ports:
-          - 4444:4444
-        options: >-
-          --health-cmd="curl -f http://localhost:4444/wd/hub/status || exit 1"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-    
     steps:
     - name: Download Build Artifact
       uses: actions/download-artifact@v4
@@ -72,6 +61,28 @@ jobs:
         npm test
         echo "Unit tests completed!"
       
+    - name: Start Selenium Server
+      run: |
+        echo "Starting Selenium server with host networking..."
+        docker run -d --name selenium-server \
+          --network host \
+          --shm-size=2g \
+          selenium/standalone-chrome:latest
+        
+        echo "Waiting for Selenium server to be ready..."
+        for i in {1..30}; do
+          if curl -f -s http://localhost:4444/wd/hub/status >/dev/null 2>&1; then
+            echo "Selenium server is ready after $i seconds!"
+            break
+          fi
+          echo "Waiting for Selenium... (attempt $i/30)"
+          sleep 1
+        done
+        
+        # Verify Selenium is ready
+        curl -f http://localhost:4444/wd/hub/status
+        echo "Selenium server confirmed ready!"
+      
     - name: Start Application in Background
       run: |
         echo "Starting Node.js application..."
@@ -81,7 +92,6 @@ jobs:
         echo $SERVER_PID > server.pid
         
         echo "Waiting for application to be ready..."
-        # Wait up to 60 seconds for server to be ready
         for i in {1..60}; do
           if curl -f -s http://localhost:3000 >/dev/null 2>&1; then
             echo "Application is ready after $i seconds!"
@@ -105,26 +115,21 @@ jobs:
           echo "Application failed to start properly after 60 seconds"
           echo "Server logs:"
           cat server.log
-          echo "Process status:"
-          ps aux | grep node || true
-          echo "Port 3000 status:"
-          netstat -tulpn | grep :3000 || echo "Port 3000 not listening"
           exit 1
         fi
         
         echo "Server is ready and responding!"
         
-    - name: Verify Selenium Server is Ready
+    - name: Test Both Services
       run: |
-        echo "Checking Selenium server status..."
+        echo "=== Testing Selenium Server ==="
         curl -f http://localhost:4444/wd/hub/status
-        echo "Selenium server is ready!"
         
-    - name: Test Server Connectivity Before Selenium
-      run: |
-        echo "Testing server connectivity..."
+        echo "=== Testing Node.js Server ==="
         curl -v http://localhost:3000
-        echo "Server response test completed"
+        
+        echo "=== Network Status ==="
+        netstat -tulpn | grep -E ":(3000|4444)" || echo "Services not found in netstat"
         
     - name: Run Selenium Integration Tests
       run: |
@@ -132,7 +137,7 @@ jobs:
         node tests/SeleniumTest.mjs github
         echo "Selenium tests completed!"
         
-    - name: Stop Application
+    - name: Stop Services
       if: always()
       run: |
         echo "Stopping application..."
@@ -141,7 +146,6 @@ jobs:
           if kill -0 $SERVER_PID 2>/dev/null; then
             kill $SERVER_PID
             echo "Stopped server with PID $SERVER_PID"
-            # Wait a bit for graceful shutdown
             sleep 2
           else
             echo "Server process was already stopped"
@@ -150,7 +154,12 @@ jobs:
         
         # Force kill any remaining node processes
         pkill -f "node src/server.js" || true
-        echo "Application stopped!"
+        
+        echo "Stopping Selenium server..."
+        docker stop selenium-server || true
+        docker rm selenium-server || true
+        
+        echo "All services stopped!"
         
     - name: Show Server Logs
       if: always()
