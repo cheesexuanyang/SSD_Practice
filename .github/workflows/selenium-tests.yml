@@ -75,17 +75,51 @@ jobs:
     - name: Start Application in Background
       run: |
         echo "Starting Node.js application..."
-        npm start &
-        sleep 5
-        echo "Application started, testing connectivity..."
-        curl http://localhost:3000 || exit 1
-        echo "Application is responding!"
+        nohup npm start > server.log 2>&1 &
+        SERVER_PID=$!
+        echo "Server PID: $SERVER_PID"
+        echo $SERVER_PID > server.pid
+        
+        echo "Waiting for application to be ready..."
+        for i in {1..30}; do
+          if curl -f http://localhost:3000 >/dev/null 2>&1; then
+            echo "Application is ready!"
+            curl -s http://localhost:3000 | head -n 5
+            break
+          fi
+          echo "Waiting... (attempt $i/30)"
+          if ! kill -0 $SERVER_PID 2>/dev/null; then
+            echo "Server process has died!"
+            echo "Server logs:"
+            cat server.log
+            exit 1
+          fi
+          sleep 2
+        done
+        
+        if ! curl -f http://localhost:3000 >/dev/null 2>&1; then
+          echo "Application failed to start properly"
+          echo "Server logs:"
+          cat server.log
+          echo "Process status:"
+          ps aux | grep node || true
+          exit 1
+        fi
         
     - name: Verify Selenium Server is Ready
       run: |
         echo "Checking Selenium server status..."
         curl -f http://localhost:4444/wd/hub/status
         echo "Selenium server is ready!"
+        
+    - name: Final Server Check Before Selenium
+      run: |
+        echo "Final check - is server still running?"
+        curl -v http://localhost:3000 || echo "Server not responding!"
+        echo "Process list:"
+        ps aux | grep node || echo "No node processes found"
+        echo "Port 3000 status:"
+        netstat -tulpn | grep :3000 || echo "Port 3000 not listening"
         
     - name: Run Selenium Integration Tests
       run: |
@@ -97,5 +131,17 @@ jobs:
       if: always()
       run: |
         echo "Stopping application..."
+        if [ -f server.pid ]; then
+          SERVER_PID=$(cat server.pid)
+          if kill -0 $SERVER_PID 2>/dev/null; then
+            kill $SERVER_PID
+            echo "Stopped server with PID $SERVER_PID"
+          else
+            echo "Server process was already stopped"
+          fi
+        fi
         pkill -f "node src/server.js" || true
         echo "Application stopped!"
+        
+        echo "Final server logs:"
+        cat server.log || echo "No server logs found"
