@@ -13,7 +13,7 @@ if (environment === 'github') {
     serverUrl = 'http://testserver:3000';
 } else {
     seleniumUrl = 'http://localhost:4444/wd/hub';
-    serverUrl = 'http://localhost:3000';
+    serverUrl = 'http://host.docker.internal:3000';
 }
 
 console.log(`Selenium URL: ${seleniumUrl}`);
