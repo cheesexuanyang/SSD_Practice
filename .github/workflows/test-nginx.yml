@@ -15,7 +15,7 @@ jobs:
 
       - name: Start Nginx with Docker
         run: |
-          docker run -d --name test-nginx -p 8080:80 -v ${{ github.workspace }}/index.html:/usr/share/nginx/html/index.html:ro nginx:latest
+          docker run -d --name test-nginx -p 8080:80 -v ${{ github.workspace }}/nginx-proxy/index.html:/usr/share/nginx/html/index.html:ro nginx:latest
 
       - name: Wait for Nginx to start
         run: sleep 5
