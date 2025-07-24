@@ -9,8 +9,8 @@ console.log(`Running tests in '${environment}' environment`);
 let seleniumUrl, serverUrl;
 
 if (environment === 'github') {
-    seleniumUrl = 'http://selenium:4444/wd/hub';
-    serverUrl = 'http://testserver:3000';
+    seleniumUrl = 'http://localhost:4444/wd/hub';
+    serverUrl = 'http://localhost:3000';
 } else {
     seleniumUrl = 'http://localhost:4444/wd/hub';
     serverUrl = 'http://host.docker.internal:3000';
@@ -30,59 +30,67 @@ async function runSeleniumTests() {
         options.addArguments('--headless');
         options.addArguments('--no-sandbox');
         options.addArguments('--disable-dev-shm-usage');
+        options.addArguments('--disable-gpu');
+        options.addArguments('--disable-extensions');
+        options.addArguments('--disable-dev-shm-usage');
+        options.addArguments('--remote-debugging-port=9222');
         
-        // Initialize the WebDriver
-        if (environment === 'github') {
-            driver = await new Builder()
-                .forBrowser('chrome')
-                .setChromeOptions(options)
-                .usingServer(seleniumUrl)
-                .build();
-        } else {
-            driver = await new Builder()
-                .forBrowser('chrome')
-                .setChromeOptions(options)
-                .usingServer(seleniumUrl)
-                .build();
-        }
+        // Initialize the WebDriver - both environments use the same setup
+        driver = await new Builder()
+            .forBrowser('chrome')
+            .setChromeOptions(options)
+            .usingServer(seleniumUrl)
+            .build();
 
         console.log("after driver init");
         
+        // Set page load timeout
+        await driver.manage().setTimeouts({ pageLoad: 30000 });
+        
         // Navigate to the application
+        console.log(`Navigating to: ${serverUrl}`);
         await driver.get(serverUrl);
         console.log("after driver get serverUrl");
 
         // Wait for the page title to contain expected text
-        await driver.wait(until.titleContains('Browser Info'), 10000);
+        await driver.wait(until.titleContains('Browser Info'), 15000);
         console.log("✓ Page loaded with correct title");
 
         // Wait for the timestamp element to appear
         const timestampElement = await driver.wait(
             until.elementLocated(By.id('timestamp')), 
-            10000
+            15000
         );
+        
+        console.log("✓ Timestamp element found");
         
         // Wait for the actual timestamp to load (not "Fetching...")
         await driver.wait(async () => {
-            const text = await timestampElement.getText();
-            return text.includes('Server timestamp:') && !text.includes('Fetching');
-        }, 10000);
+            try {
+                const text = await timestampElement.getText();
+                console.log(`Current timestamp text: "${text}"`);
+                return text.includes('Server timestamp:') && !text.includes('Fetching');
+            } catch (e) {
+                console.log('Error getting timestamp text:', e.message);
+                return false;
+            }
+        }, 20000);
 
         // Get the timestamp text
         const timestampText = await timestampElement.getText();
-        console.log(`Timestamp: ${timestampText}`);
+        console.log(`Final timestamp: ${timestampText}`);
 
         // Validate the timestamp format
         const timestampMatch = timestampText.match(/Server timestamp:\s*(.*)/);
         if (!timestampMatch) {
-            throw new Error('Timestamp text does not match expected format');
+            throw new Error(`Timestamp text does not match expected format. Got: "${timestampText}"`);
         }
         
         const extractedTimestamp = timestampMatch[1];
         const timestampRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
         
         if (!timestampRegex.test(extractedTimestamp)) {
-            throw new Error('Timestamp format is invalid');
+            throw new Error(`Timestamp format is invalid. Expected ISO format, got: "${extractedTimestamp}"`);
         }
         
         console.log('✓ Timestamp format is valid');
@@ -93,7 +101,7 @@ async function runSeleniumTests() {
         console.log(`Browser info: ${browserInfoText}`);
         
         if (!browserInfoText.includes('Your browser:')) {
-            throw new Error('Browser info not displayed correctly');
+            throw new Error(`Browser info not displayed correctly. Got: "${browserInfoText}"`);
         }
         
         console.log('✓ Browser info is displayed correctly');
@@ -101,6 +109,20 @@ async function runSeleniumTests() {
 
     } catch (error) {
         console.error('Selenium test failed:', error.message);
+        
+        // Additional debugging information
+        if (driver) {
+            try {
+                const currentUrl = await driver.getCurrentUrl();
+                console.log(`Current URL: ${currentUrl}`);
+                
+                const pageSource = await driver.getPageSource();
+                console.log('Page source (first 500 chars):', pageSource.substring(0, 500));
+            } catch (debugError) {
+                console.log('Could not get debug info:', debugError.message);
+            }
+        }
+        
         process.exit(1);
     } finally {
         if (driver) {
