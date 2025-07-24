@@ -12,6 +12,7 @@ if (environment === 'github') {
     seleniumUrl = 'http://localhost:4444/wd/hub';
     serverUrl = 'http://localhost:3000';
 } else {
+    // For local Docker setup
     seleniumUrl = 'http://localhost:4444/wd/hub';
     serverUrl = 'http://host.docker.internal:3000';
 }
@@ -32,10 +33,11 @@ async function runSeleniumTests() {
         options.addArguments('--disable-dev-shm-usage');
         options.addArguments('--disable-gpu');
         options.addArguments('--disable-extensions');
-        options.addArguments('--disable-dev-shm-usage');
         options.addArguments('--remote-debugging-port=9222');
+        options.addArguments('--disable-web-security');
+        options.addArguments('--disable-features=VizDisplayCompositor');
         
-        // Initialize the WebDriver - both environments use the same setup
+        // Initialize the WebDriver
         driver = await new Builder()
             .forBrowser('chrome')
             .setChromeOptions(options)
@@ -44,27 +46,54 @@ async function runSeleniumTests() {
 
         console.log("after driver init");
         
-        // Set page load timeout
-        await driver.manage().setTimeouts({ pageLoad: 30000 });
+        // Set timeouts
+        await driver.manage().setTimeouts({ 
+            pageLoad: 30000,
+            implicit: 10000
+        });
         
-        // Navigate to the application
-        console.log(`Navigating to: ${serverUrl}`);
-        await driver.get(serverUrl);
-        console.log("after driver get serverUrl");
+        // Test server connectivity first
+        console.log(`Testing server connectivity to ${serverUrl}`);
+        
+        // Navigate to the application with retry logic
+        let retryCount = 0;
+        const maxRetries = 5;
+        
+        while (retryCount < maxRetries) {
+            try {
+                console.log(`Attempt ${retryCount + 1}: Navigating to: ${serverUrl}`);
+                await driver.get(serverUrl);
+                console.log("Successfully navigated to server");
+                break;
+            } catch (error) {
+                retryCount++;
+                console.log(`Navigation attempt ${retryCount} failed:`, error.message);
+                
+                if (retryCount >= maxRetries) {
+                    throw new Error(`Failed to navigate to ${serverUrl} after ${maxRetries} attempts. Last error: ${error.message}`);
+                }
+                
+                console.log(`Waiting 3 seconds before retry...`);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+            }
+        }
 
         // Wait for the page title to contain expected text
-        await driver.wait(until.titleContains('Browser Info'), 15000);
+        console.log("Waiting for page title...");
+        await driver.wait(until.titleContains('Browser Info'), 20000);
         console.log("✓ Page loaded with correct title");
 
         // Wait for the timestamp element to appear
+        console.log("Looking for timestamp element...");
         const timestampElement = await driver.wait(
             until.elementLocated(By.id('timestamp')), 
-            15000
+            20000
         );
         
         console.log("✓ Timestamp element found");
         
         // Wait for the actual timestamp to load (not "Fetching...")
+        console.log("Waiting for timestamp to load...");
         await driver.wait(async () => {
             try {
                 const text = await timestampElement.getText();
@@ -74,7 +103,7 @@ async function runSeleniumTests() {
                 console.log('Error getting timestamp text:', e.message);
                 return false;
             }
-        }, 20000);
+        }, 30000);
 
         // Get the timestamp text
         const timestampText = await timestampElement.getText();
@@ -96,6 +125,7 @@ async function runSeleniumTests() {
         console.log('✓ Timestamp format is valid');
 
         // Check browser info is displayed
+        console.log("Checking browser info...");
         const browserInfoElement = await driver.findElement(By.id('browser-info'));
         const browserInfoText = await browserInfoElement.getText();
         console.log(`Browser info: ${browserInfoText}`);
@@ -105,10 +135,10 @@ async function runSeleniumTests() {
         }
         
         console.log('✓ Browser info is displayed correctly');
-        console.log('All Selenium tests passed!');
+        console.log('✓ All Selenium tests passed!');
 
     } catch (error) {
-        console.error('Selenium test failed:', error.message);
+        console.error('❌ Selenium test failed:', error.message);
         
         // Additional debugging information
         if (driver) {
@@ -117,7 +147,14 @@ async function runSeleniumTests() {
                 console.log(`Current URL: ${currentUrl}`);
                 
                 const pageSource = await driver.getPageSource();
-                console.log('Page source (first 500 chars):', pageSource.substring(0, 500));
+                console.log('Page source (first 1000 chars):', pageSource.substring(0, 1000));
+                
+                // Try to get console logs
+                const logs = await driver.manage().logs().get('browser');
+                if (logs.length > 0) {
+                    console.log('Browser console logs:');
+                    logs.forEach(log => console.log(`[${log.level.name}] ${log.message}`));
+                }
             } catch (debugError) {
                 console.log('Could not get debug info:', debugError.message);
             }

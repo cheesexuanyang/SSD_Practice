@@ -75,36 +75,44 @@ jobs:
     - name: Start Application in Background
       run: |
         echo "Starting Node.js application..."
-        nohup npm start > server.log 2>&1 &
+        npm start > server.log 2>&1 &
         SERVER_PID=$!
         echo "Server PID: $SERVER_PID"
         echo $SERVER_PID > server.pid
         
         echo "Waiting for application to be ready..."
-        for i in {1..30}; do
-          if curl -f http://localhost:3000 >/dev/null 2>&1; then
-            echo "Application is ready!"
-            curl -s http://localhost:3000 | head -n 5
+        # Wait up to 60 seconds for server to be ready
+        for i in {1..60}; do
+          if curl -f -s http://localhost:3000 >/dev/null 2>&1; then
+            echo "Application is ready after $i seconds!"
             break
           fi
-          echo "Waiting... (attempt $i/30)"
+          
+          # Check if server process is still running
           if ! kill -0 $SERVER_PID 2>/dev/null; then
             echo "Server process has died!"
             echo "Server logs:"
             cat server.log
             exit 1
           fi
-          sleep 2
+          
+          echo "Waiting... (attempt $i/60)"
+          sleep 1
         done
         
-        if ! curl -f http://localhost:3000 >/dev/null 2>&1; then
-          echo "Application failed to start properly"
+        # Final check
+        if ! curl -f -s http://localhost:3000 >/dev/null 2>&1; then
+          echo "Application failed to start properly after 60 seconds"
           echo "Server logs:"
           cat server.log
           echo "Process status:"
           ps aux | grep node || true
+          echo "Port 3000 status:"
+          netstat -tulpn | grep :3000 || echo "Port 3000 not listening"
           exit 1
         fi
+        
+        echo "Server is ready and responding!"
         
     - name: Verify Selenium Server is Ready
       run: |
@@ -112,14 +120,11 @@ jobs:
         curl -f http://localhost:4444/wd/hub/status
         echo "Selenium server is ready!"
         
-    - name: Final Server Check Before Selenium
+    - name: Test Server Connectivity Before Selenium
       run: |
-        echo "Final check - is server still running?"
-        curl -v http://localhost:3000 || echo "Server not responding!"
-        echo "Process list:"
-        ps aux | grep node || echo "No node processes found"
-        echo "Port 3000 status:"
-        netstat -tulpn | grep :3000 || echo "Port 3000 not listening"
+        echo "Testing server connectivity..."
+        curl -v http://localhost:3000
+        echo "Server response test completed"
         
     - name: Run Selenium Integration Tests
       run: |
@@ -136,12 +141,19 @@ jobs:
           if kill -0 $SERVER_PID 2>/dev/null; then
             kill $SERVER_PID
             echo "Stopped server with PID $SERVER_PID"
+            # Wait a bit for graceful shutdown
+            sleep 2
           else
             echo "Server process was already stopped"
           fi
         fi
+        
+        # Force kill any remaining node processes
         pkill -f "node src/server.js" || true
         echo "Application stopped!"
         
-        echo "Final server logs:"
+    - name: Show Server Logs
+      if: always()
+      run: |
+        echo "=== Server logs ==="
         cat server.log || echo "No server logs found"
