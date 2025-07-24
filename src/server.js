@@ -2,15 +2,15 @@ import express from 'express';
 
 const app = express();
 
-// Endpoint to return the current timestamp
-app.get('/timestamp', (req, res) => {
-  res.json({ timestamp: getCurrentTimestamp() });
-});
-
 // Helper function to get the current timestamp
 export function getCurrentTimestamp() {
   return new Date().toISOString();
 }
+
+// Endpoint to return the current timestamp
+app.get('/timestamp', (req, res) => {
+  res.json({ timestamp: getCurrentTimestamp() });
+});
 
 // Serve a simple HTML page
 app.get('/', (req, res) => {

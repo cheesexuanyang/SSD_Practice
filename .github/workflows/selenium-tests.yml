@@ -1,106 +1,101 @@
-name: Node.js Selenium Testing
+name: Automated Testing with Unit and Selenium Tests
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main, develop ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Cache Node.js modules
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: ${{ runner.os }}-node-modules
-
-      - name: Install Node.js dependencies
-        run: npm install
-
-      - name: Prepare artifacts
-        run: |
-          tar -czvf www-build.tar.gz ./package.json ./src/server.js tests
-          ls -l
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v3
-        with:
-          name: www-build
-          path: www-build.tar.gz
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install Dependencies
+      run: npm install
+      
+    - name: Create Build Artifact
+      run: |
+        tar -czf build-artifact.tar.gz package.json src/ tests/
+        
+    - name: Upload Build Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifact
+        path: build-artifact.tar.gz
 
   test:
-    needs: build
     runs-on: ubuntu-latest
-    container:
-      image: node:20
-      ports:
-        - 3000:3000
-      options: --network-alias=testserver
-
-    env:
-      TEST_BASE_URL: http://testserver:3000
-      SELENIUM_HOST: http://selenium:4444/wd/hub
-
+    needs: build
+    
     services:
       selenium:
-        image: selenium/standalone-chrome
+        image: selenium/standalone-chrome:latest
         ports:
           - 4444:4444
-
+        options: >-
+          --health-cmd="curl -f http://localhost:4444/wd/hub/status || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    
     steps:
-      - name: Download built files
-        uses: actions/download-artifact@v3
-        with:
-          name: www-build
-
-      - name: Extract artifacts
-        run: |
-          tar -xzvf www-build.tar.gz
-          ls -l
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: List node_modules
-        run: ls -l node_modules
-
-      - name: List files for debugging
-        run: |
-          echo "Current directory:"
-          pwd
-          echo "Files in the current directory:"
-          ls -ltra .
-          echo "Files in the src directory:"
-          ls -ltra src/
-          echo "Files in the tests directory:"
-          ls -ltra tests/
-
-      - name: Run unit tests
-        run: npm test
-
-      - name: Start Node.js server
-        run: |
-          nohup node src/server.js &  # Start the server in the background
-          sleep 5  # Give the server some time to start
-
-      - name: Verify server is running
-        run: |
-          curl -f http://localhost:3000 || { echo "Server failed to start"; exit 1; }
-
-      - name: Wait for Selenium server to be up
-        run: |
-          for i in {1..10}; do
-            curl -s $SELENIUM_HOST && break || sleep 3
-          done
-
-      - name: Run Selenium tests
-        run: node tests/SeleniumTest.mjs github
+    - name: Download Build Artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: build-artifact
+        
+    - name: Extract Build Artifact
+      run: tar -xzf build-artifact.tar.gz
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Install Dependencies
+      run: npm install
+      
+    - name: Run Unit Tests
+      run: |
+        echo "Running unit tests..."
+        npm test
+        echo "Unit tests completed!"
+      
+    - name: Start Application in Background
+      run: |
+        echo "Starting Node.js application..."
+        npm start &
+        sleep 5
+        echo "Application started, testing connectivity..."
+        curl http://localhost:3000 || exit 1
+        echo "Application is responding!"
+        
+    - name: Verify Selenium Server is Ready
+      run: |
+        echo "Checking Selenium server status..."
+        curl -f http://localhost:4444/wd/hub/status
+        echo "Selenium server is ready!"
+        
+    - name: Run Selenium Integration Tests
+      run: |
+        echo "Running Selenium integration tests..."
+        node tests/SeleniumTest.mjs github
+        echo "Selenium tests completed!"
+        
+    - name: Stop Application
+      if: always()
+      run: |
+        echo "Stopping application..."
+        pkill -f "node src/server.js" || true
+        echo "Application stopped!"

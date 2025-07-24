@@ -1,72 +1,114 @@
 import { Builder, By, until } from 'selenium-webdriver';
-import assert from 'assert';
+import chrome from 'selenium-webdriver/chrome.js';
 
-// Get the argument (default to 'local' if not provided)
+// Get the environment from command line arguments
 const environment = process.argv[2] || 'local';
 
-// URLs based on environment
-// Obtain dev selenium server IP using: docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' selenium-server
-const seleniumUrl = environment === 'github' 
-  ? 'http://selenium:4444/wd/hub' 
-  : 'http://localhost:4444/wd/hub';
-
-// Note: Start the nodejs server before running the test locally
-const serverUrl = environment === 'github' 
-  ? 'http://testserver:3000' 
-  : 'http://localhost:3000';
-
 console.log(`Running tests in '${environment}' environment`);
+
+let seleniumUrl, serverUrl;
+
+if (environment === 'github') {
+    seleniumUrl = 'http://selenium:4444/wd/hub';
+    serverUrl = 'http://testserver:3000';
+} else {
+    seleniumUrl = 'http://localhost:4444/wd/hub';
+    serverUrl = 'http://localhost:3000';
+}
+
 console.log(`Selenium URL: ${seleniumUrl}`);
 console.log(`Server URL: ${serverUrl}`);
 
-(async function testTimestamp() {
-
-    console.log("before driver init")
-
-    // Initialize the WebDriver with Chrome
-    const driver = environment === 'github' 
-        ? await new Builder()
-        .forBrowser('chrome')
-        .usingServer(seleniumUrl) // Specify the Selenium server
-        .build()
-        : await new Builder()
-        .forBrowser('chrome')
-        .usingServer(seleniumUrl) // Specify the Selenium server
-        .build();
-
-
+async function runSeleniumTests() {
+    let driver;
+    
     try {
-
-        console.log("after driver init")
+        console.log("before driver init");
         
+        // Set up Chrome options
+        const options = new chrome.Options();
+        options.addArguments('--headless');
+        options.addArguments('--no-sandbox');
+        options.addArguments('--disable-dev-shm-usage');
+        
+        // Initialize the WebDriver
+        if (environment === 'github') {
+            driver = await new Builder()
+                .forBrowser('chrome')
+                .setChromeOptions(options)
+                .usingServer(seleniumUrl)
+                .build();
+        } else {
+            driver = await new Builder()
+                .forBrowser('chrome')
+                .setChromeOptions(options)
+                .usingServer(seleniumUrl)
+                .build();
+        }
+
+        console.log("after driver init");
+        
+        // Navigate to the application
         await driver.get(serverUrl);
+        console.log("after driver get serverUrl");
 
-        console.log("after driver.get serverUrl")
+        // Wait for the page title to contain expected text
+        await driver.wait(until.titleContains('Browser Info'), 10000);
+        console.log("✓ Page loaded with correct title");
 
-        // Wait for the timestamp to appear on the page
-        let timestampElement = await driver.wait(
-            until.elementLocated(By.id('timestamp')), // Assuming the timestamp has an id of 'timestamp'
-            5000 // Timeout in milliseconds
+        // Wait for the timestamp element to appear
+        const timestampElement = await driver.wait(
+            until.elementLocated(By.id('timestamp')), 
+            10000
         );
+        
+        // Wait for the actual timestamp to load (not "Fetching...")
+        await driver.wait(async () => {
+            const text = await timestampElement.getText();
+            return text.includes('Server timestamp:') && !text.includes('Fetching');
+        }, 10000);
 
         // Get the timestamp text
-        let timestampText = await timestampElement.getText();
+        const timestampText = await timestampElement.getText();
         console.log(`Timestamp: ${timestampText}`);
 
-        // Extract the actual timestamp after "Server timestamp: "
+        // Validate the timestamp format
         const timestampMatch = timestampText.match(/Server timestamp:\s*(.*)/);
-        assert.ok(timestampMatch, 'Timestamp text does not match expected format');
+        if (!timestampMatch) {
+            throw new Error('Timestamp text does not match expected format');
+        }
+        
         const extractedTimestamp = timestampMatch[1];
-
-        // Validate the timestamp format (ISO 8601 format)
         const timestampRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-        assert.match(extractedTimestamp, timestampRegex, 'Timestamp format is invalid');
-        console.log('Timestamp format is valid.');
+        
+        if (!timestampRegex.test(extractedTimestamp)) {
+            throw new Error('Timestamp format is invalid');
+        }
+        
+        console.log('✓ Timestamp format is valid');
 
-    } catch (err) {
-        console.error('Test failed:', err);
+        // Check browser info is displayed
+        const browserInfoElement = await driver.findElement(By.id('browser-info'));
+        const browserInfoText = await browserInfoElement.getText();
+        console.log(`Browser info: ${browserInfoText}`);
+        
+        if (!browserInfoText.includes('Your browser:')) {
+            throw new Error('Browser info not displayed correctly');
+        }
+        
+        console.log('✓ Browser info is displayed correctly');
+        console.log('All Selenium tests passed!');
+
+    } catch (error) {
+        console.error('Selenium test failed:', error.message);
+        process.exit(1);
     } finally {
-        // Quit the browser session
-        await driver.quit();
+        if (driver) {
+            await driver.quit();
+            console.log('WebDriver closed');
+        }
     }
-})();
+}
+
+// Run the tests
+runSeleniumTests();
