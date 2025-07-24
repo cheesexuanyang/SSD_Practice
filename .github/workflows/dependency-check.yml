@@ -22,7 +22,7 @@ jobs:
       with:
         project: "SSD-Practice"  # Change this to your project name
         path: "."
-        format: "HTML, SARIF"
+        format: "HTML,SARIF"
         out: "dependency-check-report"
         args: >
           --enableRetired
