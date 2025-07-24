@@ -20,7 +20,7 @@ jobs:
     - name: Run OWASP Dependency Check
       uses: dependency-check/Dependency-Check_Action@main
       with:
-        project: "SSD-Practice"  # Change this to your project name
+        project: "SSD-Practice"
         path: "."
         format: "HTML"
         out: "dependency-check-report"
@@ -33,9 +33,3 @@ jobs:
       with:
         name: Dependency-Check-Report
         path: dependency-check-report
-        
-    - name: Upload Report to GitHub Security Tab
-      uses: github/codeql-action/upload-sarif@v3
-      if: always()
-      with:
-        sarif_file: dependency-check-report/dependency-check-report.sarif
