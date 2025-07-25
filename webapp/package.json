@@ -1,20 +1,27 @@
 {
-  "name": "secure-webapp",
+  "name": "ssd-web-application",
   "version": "1.0.0",
-  "description": "Secure web application with input validation",
-  "main": "server.js",
+  "description": "Secure web application with comprehensive testing",
+  "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "nodemon server.js"
+    "start": "node src/server.js",
+    "test": "mocha tests/test.js --timeout 10000",
+    "dev": "nodemon src/server.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "supertest": "^6.3.3"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2"
+    "chai": "^4.3.8",
+    "mocha": "^10.2.0",
+    "selenium-webdriver": "^4.15.0",
+    "eslint": "^8.50.0",
+    "eslint-plugin-security": "^1.7.1",
+    "@microsoft/eslint-formatter-sarif": "^3.0.0"
   },
-  "keywords": ["security", "validation", "express"],
+  "keywords": ["security", "testing", "express", "selenium"],
   "author": "Chee Xuan Yang",
   "license": "MIT"
 }
