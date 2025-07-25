@@ -7,7 +7,6 @@ on:
     branches: [ main ]
 
 jobs:
-  # Job 1: Build and prepare the application
   build:
     name: Build Application
     runs-on: ubuntu-latest
@@ -23,13 +22,12 @@ jobs:
         cache: 'npm'
         cache-dependency-path: webapp/package-lock.json
 
-    - name: Install Dependencies (Webapp Only)
+    - name: Install Dependencies
       working-directory: webapp
       run: npm install
 
     - name: Create Build Artifact
-      run: |
-        tar -czf build-artifact.tar.gz webapp/ tests/
+      run: tar -czf build-artifact.tar.gz webapp/ tests/
 
     - name: Upload Build Artifact
       uses: actions/upload-artifact@v4
@@ -37,7 +35,6 @@ jobs:
         name: build-artifact
         path: build-artifact.tar.gz
 
-  # Job 2: Dependency Security Check
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
@@ -65,7 +62,6 @@ jobs:
         name: Dependency-Check-Report
         path: dependency-check-report
 
-  # Job 3: Integration and UI Testing
   integration-ui-tests:
     name: Integration and UI Testing
     runs-on: ubuntu-latest
@@ -92,11 +88,12 @@ jobs:
       run: npm install
 
     - name: Run Integration Tests (Main App)
+      working-directory: webapp
       run: |
         echo "🧪 Running integration tests for main application..."
-        npm start > main-server.log 2>&1 &
+        npm start > ../main-server.log 2>&1 &
         MAIN_PID=$!
-        echo $MAIN_PID > main-server.pid
+        echo $MAIN_PID > ../main-server.pid
 
         echo "Waiting for main server to start..."
         for i in {1..30}; do
@@ -224,7 +221,6 @@ jobs:
         echo "=== Webapp Logs ==="
         cat webapp.log || echo "No webapp logs"
 
-  # Job 4: Security Testing Summary
   security-summary:
     name: Security Testing Summary
     runs-on: ubuntu-latest
