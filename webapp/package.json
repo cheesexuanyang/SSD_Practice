@@ -2,12 +2,12 @@
   "name": "ssd-web-application",
   "version": "1.0.0",
   "description": "Secure web application with comprehensive testing",
-  "main": "src/server.js",
+  "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
+    "start": "node server.js",
     "test": "npx mocha tests/test.js --timeout 10000",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon server.js"
   },
   "dependencies": {
     "express": "^4.18.2",
