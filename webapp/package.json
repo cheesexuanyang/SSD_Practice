@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "test": "mocha tests/test.js --timeout 10000",
+    "test": "npx mocha tests/test.js --timeout 10000",
     "dev": "nodemon src/server.js"
   },
   "dependencies": {
@@ -14,14 +14,19 @@
     "supertest": "^6.3.3"
   },
   "devDependencies": {
+    "@microsoft/eslint-formatter-sarif": "^3.0.0",
     "chai": "^4.3.8",
-    "mocha": "^10.2.0",
-    "selenium-webdriver": "^4.15.0",
     "eslint": "^8.50.0",
     "eslint-plugin-security": "^1.7.1",
-    "@microsoft/eslint-formatter-sarif": "^3.0.0"
+    "mocha": "^10.8.2",
+    "selenium-webdriver": "^4.15.0"
   },
-  "keywords": ["security", "testing", "express", "selenium"],
+  "keywords": [
+    "security",
+    "testing",
+    "express",
+    "selenium"
+  ],
   "author": "Chee Xuan Yang",
   "license": "MIT"
 }
